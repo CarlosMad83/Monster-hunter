@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Cazador: Radar Satélite Dinámico & AR</title>
+  <title>Cazador de Criaturas 3D</title>
 
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Three.js (WebGL 3D nativo) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
   <style>
     * { box-sizing: border-box; }
@@ -17,7 +20,7 @@
       user-select: none;
     }
 
-    /* VISTA MAPA */
+    /* MAPA */
     #map-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
     #map { width: 100%; height: 100%; }
 
@@ -32,11 +35,10 @@
       border: 1px solid rgba(255, 255, 255, 0.25); box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     }
 
-    /* Contenedor del marcador dinámico */
+    /* Marcador del mapa */
     .creature-icon-container {
       display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
       cursor: pointer;
-      transition: transform 0.2s ease-out;
     }
 
     .creature-label {
@@ -52,10 +54,10 @@
       animation: pulseGreen 1s infinite alternate;
     }
 
-    .creature-icon-container img {
-      filter: drop-shadow(0 0 8px rgba(0,0,0,0.9)) drop-shadow(0 0 10px var(--glow, #ff0055));
+    .creature-icon-container canvas {
+      border-radius: 50%;
+      filter: drop-shadow(0 0 10px var(--glow, #ff0055));
       animation: floatMotion 2s ease-in-out infinite alternate;
-      transition: width 0.3s ease, height 0.3s ease;
     }
 
     .player-pin {
@@ -64,21 +66,15 @@
       animation: pulsePlayer 1.8s infinite;
     }
 
-    @keyframes pulseGreen {
-      from { transform: scale(1); }
-      to { transform: scale(1.08); }
-    }
-    @keyframes floatMotion {
-      0% { transform: translateY(0px); }
-      100% { transform: translateY(-6px); }
-    }
+    @keyframes pulseGreen { from { transform: scale(1); } to { transform: scale(1.08); } }
+    @keyframes floatMotion { 0% { transform: translateY(0px); } 100% { transform: translateY(-6px); } }
     @keyframes pulsePlayer {
       0% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0.7); }
       70% { box-shadow: 0 0 0 15px rgba(0, 122, 255, 0); }
       100% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0); }
     }
 
-    /* VISTA AR */
+    /* VISOR 3D / AR */
     #ar-view {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       z-index: 2000; display: none; background: #0f172a; overflow: hidden;
@@ -86,6 +82,11 @@
 
     #ar-video {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
+    }
+
+    #three-canvas {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 5; pointer-events: none;
     }
 
     .ar-overlay {
@@ -96,8 +97,8 @@
 
     .ar-hud-top {
       text-align: center; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-      pointer-events: auto; background: rgba(0,0,0,0.7); padding: 12px 22px;
-      border-radius: 16px; border: 1px solid rgba(255,255,255,0.25);
+      pointer-events: auto; background: rgba(0,0,0,0.7); padding: 12px 24px;
+      border-radius: 18px; border: 1px solid rgba(255,255,255,0.25);
     }
 
     .ar-hud-top h2 { margin: 0; font-size: 18px; letter-spacing: 1px; }
@@ -117,39 +118,26 @@
     .range-locked { background: rgba(239, 68, 68, 0.85); color: #fff; border: 1px solid #ff7b7b; }
     .range-ready { background: rgba(34, 197, 94, 0.85); color: #fff; border: 1px solid #86efac; animation: pulseGreen 1s infinite alternate; }
 
-    #ar-target-wrapper {
-      position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: auto;
-      cursor: crosshair;
-    }
-
-    #ar-target-img {
-      width: 200px; height: 200px;
-      filter: drop-shadow(0 0 18px rgba(255,255,255,0.8));
-      transition: transform 0.1s, width 0.3s, height 0.3s;
-    }
-
     .btn-exit {
       background: rgba(15, 23, 42, 0.85); color: #fff; border: 1px solid rgba(255,255,255,0.4);
-      padding: 12px 28px; border-radius: 24px; font-size: 14px; font-weight: 700;
+      padding: 12px 32px; border-radius: 24px; font-size: 14px; font-weight: 700;
       cursor: pointer; pointer-events: auto; margin-bottom: 20px;
     }
 
     .laser-flash {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0, 255, 213, 0.3); pointer-events: none; z-index: 99; display: none;
+      background: rgba(0, 255, 213, 0.35); pointer-events: none; z-index: 99; display: none;
     }
 
     .range-warning-flash {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(239, 68, 68, 0.25); pointer-events: none; z-index: 98; display: none;
+      background: rgba(239, 68, 68, 0.3); pointer-events: none; z-index: 98; display: none;
     }
     
     .ar-crosshair {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 50px; height: 50px; border: 2px dashed rgba(255,255,255,0.5);
-      border-radius: 50%; pointer-events: none; z-index: 5;
+      width: 50px; height: 50px; border: 2px dashed rgba(255,255,255,0.6);
+      border-radius: 50%; pointer-events: none; z-index: 6;
     }
   </style>
 </head>
@@ -167,17 +155,15 @@
   <!-- REALIDAD AUMENTADA -->
   <div id="ar-view">
     <video id="ar-video" autoplay playsinline muted></video>
+    <canvas id="three-canvas"></canvas>
+
     <div class="laser-flash" id="flash"></div>
     <div class="range-warning-flash" id="warning-flash"></div>
     <div class="ar-crosshair"></div>
 
-    <div id="ar-target-wrapper">
-      <img id="ar-target-img" src="" alt="Criatura" />
-    </div>
-
     <div class="ar-overlay">
       <div class="ar-hud-top">
-        <h2 id="target-title">CRIATURA</h2>
+        <h2 id="target-title">CRIATURA 3D</h2>
         <div id="hp-container"><div id="hp-bar"></div></div>
         <div id="distance-display">Distancia: -- m</div>
         <div id="range-badge" class="range-status range-locked">FUERA DE RANGO (> 5m)</div>
@@ -190,57 +176,197 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    // 1. GENERADOR PROCEDIMENTAL DE CRIATURAS
-    function generateCreatureImage(type) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 160; canvas.height = 160;
-      const ctx = canvas.getContext('2d');
-      const rand = Math.random;
-
-      ctx.clearRect(0, 0, 160, 160);
+    /* =========================================================================
+       1. GENERADOR PROCEDIMENTAL DE MODELOS 3D (THREE.JS)
+       ========================================================================= */
+    function createProceduralCreature3D(type, seed = Math.random()) {
+      const group = new THREE.Group();
+      const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
 
       if (type === 'monster') {
-        const hue = [0, 20, 280, 130][Math.floor(rand() * 4)];
-        ctx.fillStyle = `hsl(${hue}, 85%, 30%)`;
-        ctx.beginPath();
-        ctx.moveTo(35, 60); ctx.lineTo(20, 15); ctx.lineTo(55, 45);
-        ctx.moveTo(125, 60); ctx.lineTo(140, 15); ctx.lineTo(105, 45);
-        ctx.fill();
-        ctx.fillStyle = `hsl(${hue}, 80%, 48%)`;
-        ctx.beginPath(); ctx.ellipse(80, 85, 45, 42, 0, 0, Math.PI * 2); ctx.fill();
+        // --- MONSTRUO 3D AMIGABLE (Formas orgánicas, cuernos, ojos brillantes) ---
+        const colors = [0xff4757, 0xffa502, 0x2ed573, 0x9b59b6, 0x1e90ff];
+        const primaryColor = colors[Math.floor(rand() * colors.length)];
+        const secondaryColor = 0xffffff;
+
+        // Cuerpo bulboso con relieve
+        const bodyGeo = new THREE.DodecahedronGeometry(1.2, 2);
+        const bodyMat = new THREE.MeshStandardMaterial({
+          color: primaryColor,
+          roughness: 0.4,
+          metalness: 0.1,
+          flatShading: true
+        });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        group.add(body);
+
+        // Cuernos estilizados
+        const hornGeo = new THREE.ConeGeometry(0.25, 0.8, 6);
+        const hornMat = new THREE.MeshStandardMaterial({ color: 0xffd32a, roughness: 0.3 });
         
-        [60, 100].forEach(x => {
-          ctx.fillStyle = '#fff';
-          ctx.beginPath(); ctx.arc(x, 70, 12, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#000';
-          ctx.beginPath(); ctx.arc(x, 70, 5, 0, Math.PI * 2); ctx.fill();
+        const hornLeft = new THREE.Mesh(hornGeo, hornMat);
+        hornLeft.position.set(-0.7, 1.1, 0);
+        hornLeft.rotation.z = 0.4;
+        group.add(hornLeft);
+
+        const hornRight = new THREE.Mesh(hornGeo, hornMat);
+        hornRight.position.set(0.7, 1.1, 0);
+        hornRight.rotation.z = -0.4;
+        group.add(hornRight);
+
+        // Ojos 3D expresivos
+        const eyeCount = rand() > 0.5 ? 2 : 3;
+        const eyeXPositions = eyeCount === 2 ? [-0.4, 0.4] : [-0.55, 0, 0.55];
+
+        eyeXPositions.forEach(x => {
+          const eyeWhiteGeo = new THREE.SphereGeometry(0.3, 16, 16);
+          const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+          const eyeWhite = new THREE.Mesh(eyeWhiteGeo, eyeWhiteMat);
+          eyeWhite.position.set(x, 0.3, 0.95);
+          group.add(eyeWhite);
+
+          const pupilGeo = new THREE.SphereGeometry(0.14, 12, 12);
+          const pupilMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+          const pupil = new THREE.Mesh(pupilGeo, pupilMat);
+          pupil.position.set(x, 0.3, 1.18);
+          group.add(pupil);
         });
 
-        ctx.fillStyle = '#2b0000';
-        ctx.beginPath(); ctx.arc(80, 95, 20, 0, Math.PI); ctx.fill();
-        ctx.fillStyle = '#fff';
-        for (let i = 65; i <= 95; i += 10) {
-          ctx.beginPath(); ctx.moveTo(i, 95); ctx.lineTo(i + 5, 106); ctx.lineTo(i + 10, 95);
-          ctx.fill();
-        }
+        // Extremidades pequeñas
+        const armGeo = new THREE.SphereGeometry(0.35, 8, 8);
+        const armLeft = new THREE.Mesh(armGeo, bodyMat);
+        armLeft.position.set(-1.2, -0.2, 0.2);
+        group.add(armLeft);
+
+        const armRight = new THREE.Mesh(armGeo, bodyMat);
+        armRight.position.set(1.2, -0.2, 0.2);
+        group.add(armRight);
+
       } else {
-        const grad = ctx.createRadialGradient(80, 70, 10, 80, 85, 55);
-        grad.addColorStop(0, 'rgba(255, 255, 255, 0.98)');
-        grad.addColorStop(1, 'rgba(56, 189, 248, 0.1)');
-        ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.moveTo(40, 75);
-        ctx.bezierCurveTo(40, 20, 120, 20, 120, 75); ctx.bezierCurveTo(125, 120, 110, 140, 100, 130);
-        ctx.bezierCurveTo(90, 120, 80, 145, 75, 130); ctx.bezierCurveTo(70, 120, 55, 145, 45, 130);
-        ctx.bezierCurveTo(35, 120, 35, 110, 40, 75); ctx.fill();
-        ctx.fillStyle = '#0f172a';
-        ctx.beginPath(); ctx.ellipse(66, 68, 6, 10, -0.1, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(94, 68, 6, 10, 0.1, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(80, 90, 6, 9, 0, 0, Math.PI * 2); ctx.fill();
+        // --- FANTASMA 3D ESPECTRAL (Translúcido, etéreo, halo luminoso) ---
+        const ghostGeo = new THREE.CylinderGeometry(0.1, 1.1, 2.2, 16, 8, true);
+        const ghostMat = new THREE.MeshStandardMaterial({
+          color: 0x70a1ff,
+          emissive: 0x2ed573,
+          emissiveIntensity: 0.35,
+          transparent: true,
+          opacity: 0.78,
+          roughness: 0.1,
+          side: THREE.DoubleSide
+        });
+        const body = new THREE.Mesh(ghostGeo, ghostMat);
+        body.position.y = -0.4;
+        group.add(body);
+
+        // Cabeza redondeada
+        const headGeo = new THREE.SphereGeometry(0.9, 20, 20);
+        const head = new THREE.Mesh(headGeo, ghostMat);
+        head.position.y = 0.6;
+        group.add(head);
+
+        // Ojos vacíos espectrales
+        const eyeGeo = new THREE.SphereGeometry(0.18, 12, 12);
+        const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0a192f });
+
+        const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+        eyeL.position.set(-0.35, 0.7, 0.82);
+        group.add(eyeL);
+
+        const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+        eyeR.position.set(0.35, 0.7, 0.82);
+        group.add(eyeR);
+
+        // Halo ectoplásmico
+        const haloGeo = new THREE.TorusGeometry(1.2, 0.05, 8, 24);
+        const haloMat = new THREE.MeshBasicMaterial({ color: 0x7efff5, transparent: true, opacity: 0.4 });
+        const halo = new THREE.Mesh(haloGeo, haloMat);
+        halo.rotation.x = Math.PI / 2;
+        halo.position.y = -1.2;
+        group.add(halo);
       }
-      return canvas.toDataURL();
+
+      return group;
     }
 
-    // 2. AUDIO SINTETIZADO
+    // Renderiza una captura rápida del modelo 3D en un canvas pequeño para el mapa
+    function render3DToThumbnail(creatureGroup) {
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 120;
+      thumbCanvas.height = 120;
+
+      const thumbRenderer = new THREE.WebGLRenderer({ canvas: thumbCanvas, alpha: true, antialias: true });
+      thumbRenderer.setSize(120, 120);
+
+      const thumbScene = new THREE.Scene();
+      const thumbCam = new THREE.PerspectiveCamera(45, 1, 0.1, 50);
+      thumbCam.position.set(0, 0, 4);
+
+      const light1 = new THREE.DirectionalLight(0xffffff, 1.2);
+      light1.position.set(2, 3, 4);
+      thumbScene.add(light1);
+      thumbScene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+      const clone = creatureGroup.clone();
+      clone.position.set(0, 0, 0);
+      thumbScene.add(clone);
+
+      thumbRenderer.render(thumbScene, thumbCam);
+      const dataUrl = thumbCanvas.toDataURL();
+      thumbRenderer.dispose();
+      return dataUrl;
+    }
+
+    /* =========================================================================
+       2. ESCENA THREE.JS PARA REALIDAD AUMENTADA (CÁMARA + GIROSCOPIO + GPS)
+       ========================================================================= */
+    let threeScene, threeCamera, threeRenderer;
+    let activeCreatureMesh = null;
+    let activeLight = null;
+
+    function initThreeAR() {
+      const canvas = document.getElementById('three-canvas');
+      threeRenderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      threeRenderer.setSize(window.innerWidth, window.innerHeight);
+      threeRenderer.setPixelRatio(window.devicePixelRatio);
+
+      threeScene = new THREE.Scene();
+      threeCamera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+      threeCamera.position.set(0, 0, 0);
+
+      const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+      threeScene.add(ambient);
+
+      activeLight = new THREE.PointLight(0xffffff, 1.5, 50);
+      activeLight.position.set(2, 4, 2);
+      threeScene.add(activeLight);
+
+      window.addEventListener('resize', () => {
+        threeCamera.aspect = window.innerWidth / window.innerHeight;
+        threeCamera.updateProjectionMatrix();
+        threeRenderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      animateThree();
+    }
+
+    let clock = new THREE.Clock();
+    function animateThree() {
+      requestAnimationFrame(animateThree);
+      const delta = clock.getDelta();
+      const time = clock.getElapsedTime();
+
+      if (activeCreatureMesh) {
+        // Animación suave continua de respiración/giro en 3D
+        activeCreatureMesh.rotation.y += 0.8 * delta;
+        activeCreatureMesh.position.y = Math.sin(time * 2) * 0.25; // Flotación
+      }
+
+      threeRenderer.render(threeScene, threeCamera);
+    }
+
+    /* =========================================================================
+       3. EFECTOS DE AUDIO SINTETIZADOS
+       ========================================================================= */
     let audioCtx = null;
     function initAudio() {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -248,7 +374,7 @@
     }
 
     function playSound(type) {
-      if(!audioCtx) return;
+      if (!audioCtx) return;
       const now = audioCtx.currentTime;
 
       if (type === 'laser') {
@@ -271,7 +397,9 @@
       }
     }
 
-    // 3. MAPA Y GEOMETRÍA
+    /* =========================================================================
+       4. MAPA Y GEOLOCALIZACIÓN
+       ========================================================================= */
     let totalScore = 0;
     let targetHP = 100;
     let currentCreatureId = null;
@@ -293,13 +421,12 @@
       return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
     }
 
-    function getRandomCoord(lat, lng, radiusMeters = 70) {
+    function getRandomCoord(lat, lng, radiusMeters = 60) {
       const r = radiusMeters / 111000, u = Math.random(), v = Math.random();
       const w = r * Math.sqrt(u), t = 2 * Math.PI * v;
       return [lat + w * Math.cos(t), lng + (w * Math.sin(t)) / Math.cos(lat * (Math.PI / 180))];
     }
 
-    // Actualiza el tamaño de cada criatura en el mapa según te mueves
     function updateMapCreaturesScale() {
       if (!playerLat || !playerLng) return;
 
@@ -311,9 +438,8 @@
         const img = el.querySelector('img');
         const label = el.querySelector('.creature-label');
 
-        // Escala dinámica del mapa: de 35px (lejos: >=60m) hasta 90px (a 5m o menos)
-        let mapSize = 95 - (dist * 0.9);
-        if (mapSize < 35) mapSize = 35;
+        let mapSize = 90 - (dist * 0.8);
+        if (mapSize < 40) mapSize = 40;
         if (mapSize > 90) mapSize = 90;
 
         img.style.width = `${mapSize}px`;
@@ -332,21 +458,31 @@
     function spawnCreatures(lat, lng) {
       entitiesGroup.clearLayers();
       spawnedData = {};
-      const archetypes = [{ type: 'monster', count: 3, glow: '#ff3b30' }, { type: 'ghost', count: 3, glow: '#38bdf8' }];
+      const archetypes = [{ type: 'monster', count: 3, glow: '#ff4757' }, { type: 'ghost', count: 3, glow: '#70a1ff' }];
 
       archetypes.forEach(group => {
         for (let i = 0; i < group.count; i++) {
           const id = `${group.type}_${i}`;
           const [cLat, cLng] = getRandomCoord(lat, lng, 60);
-          const imgUrl = generateCreatureImage(group.type);
 
-          spawnedData[id] = { id, type: group.type, lat: cLat, lng: cLng, img: imgUrl };
+          // Generar malla 3D procedural
+          const creature3D = createProceduralCreature3D(group.type);
+          const thumbUrl = render3DToThumbnail(creature3D);
+
+          spawnedData[id] = {
+            id,
+            type: group.type,
+            lat: cLat,
+            lng: cLng,
+            mesh: creature3D,
+            thumb: thumbUrl
+          };
 
           const customIcon = L.divIcon({
             className: '',
             html: `<div class="creature-icon-container" id="creature-${id}">
                      <div class="creature-label">Calculando...</div>
-                     <img src="${imgUrl}" style="--glow: ${group.glow}; width: 55px; height: 55px;" />
+                     <img src="${thumbUrl}" style="--glow: ${group.glow}; width: 55px; height: 55px;" />
                    </div>`,
             iconSize: [120, 110],
             iconAnchor: [60, 95]
@@ -361,11 +497,11 @@
       updateMapCreaturesScale();
     }
 
-    // 4. MODO AR Y CONDICIÓN DE ATAQUE A < 5 METROS
+    /* =========================================================================
+       5. COMBATE Y REALIDAD AUMENTADA CON THREE.JS
+       ========================================================================= */
     const arView = document.getElementById('ar-view');
     const arVideo = document.getElementById('ar-video');
-    const arWrapper = document.getElementById('ar-target-wrapper');
-    const arTargetImg = document.getElementById('ar-target-img');
     const distanceDisplay = document.getElementById('distance-display');
     const rangeBadge = document.getElementById('range-badge');
     const hpBar = document.getElementById('hp-bar');
@@ -375,7 +511,7 @@
     let videoStream = null;
     let arActive = false;
     let baseAlpha = null;
-    let targetHeadingOffset = 0;
+    let targetAzimuth = 0;
 
     window.startARCapture = async function(id) {
       initAudio();
@@ -384,15 +520,20 @@
       targetHP = 100;
       hpBar.style.width = '100%';
       hpBar.style.background = '#22c55e';
-      arTargetImg.src = spawnedData[id].img;
-      
+
+      // Montar la criatura 3D en la escena
+      if (activeCreatureMesh) threeScene.remove(activeCreatureMesh);
+      activeCreatureMesh = spawnedData[id].mesh;
+      threeScene.add(activeCreatureMesh);
+
+      // Desfase horizontal inicial aleatorio para obligar a buscarla
       baseAlpha = null;
-      targetHeadingOffset = (Math.random() * 80) - 40;
-      arWrapper.style.transform = `translate(-50%, -50%)`;
+      targetAzimuth = (Math.random() * 60) - 30; // Entre -30 y +30 grados respecto a tu frente
 
       arView.style.display = 'block';
       updateARDistance();
 
+      // Giroscopio (iOS/Android)
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
           const perm = await DeviceOrientationEvent.requestPermission();
@@ -402,6 +543,7 @@
         window.addEventListener('deviceorientation', handleOrientation);
       }
 
+      // Cámara
       try {
         if (navigator.mediaDevices) {
           videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -410,12 +552,14 @@
       } catch (err) { console.warn("Sin cámara:", err); }
     };
 
+    // Actualiza la posición 3D real de la criatura conforme caminamos con el GPS
     function updateARDistance() {
-      if (!arActive || !currentCreatureId) return;
+      if (!arActive || !currentCreatureId || !activeCreatureMesh) return;
       const c = spawnedData[currentCreatureId];
       currentDistance = Math.round(getDistance(playerLat, playerLng, c.lat, c.lng));
       distanceDisplay.innerText = `Distancia: ${currentDistance} metros`;
 
+      // Regla de los 5 metros
       if (currentDistance <= 5) {
         rangeBadge.className = "range-status range-ready";
         rangeBadge.innerText = "¡EN RANGO DE ATAQUE! (< 5m)";
@@ -426,32 +570,38 @@
         distanceDisplay.style.color = "#ef4444";
       }
 
-      // Escala visual en AR: desde 70px (lejos) hasta 360px (cuerpo a cuerpo a <=5m)
-      let size = 370 - (currentDistance * 4.5);
-      if (size < 70) size = 70;
-      if (size > 360) size = 360;
-      arTargetImg.style.width = size + 'px';
-      arTargetImg.style.height = size + 'px';
+      // Posicionamiento en Z 3D:
+      // Mapeamos los metros GPS a unidades Three.js (entre -3.5 y -20)
+      // A 2 metros está a Z=-3.5 (enorme y encima de ti); a 40 metros está a Z=-20 (pequeño y en el horizonte).
+      let zDist = - (Math.max(2, Math.min(currentDistance, 45)) * 0.6 + 2.5);
+      activeCreatureMesh.position.z = zDist;
     }
 
+    // Orientación por giroscopio (mueve la cámara Three.js alrededor de la criatura)
     function handleOrientation(e) {
-      if (!arActive) return;
+      if (!arActive || !activeCreatureMesh) return;
       let alpha = e.webkitCompassHeading || e.alpha;
       if (alpha === null) return;
 
       if (baseAlpha === null) baseAlpha = alpha;
 
-      let diff = (baseAlpha + targetHeadingOffset) - alpha;
+      let diff = (baseAlpha + targetAzimuth) - alpha;
       if (diff > 180) diff -= 360;
       if (diff < -180) diff += 360;
 
-      let xMove = (diff / 45) * (window.innerWidth / 2);
-      let yMove = e.beta ? (e.beta - 70) * 8 : 0;
+      // Desplazamiento lateral X en el mundo 3D según el ángulo
+      const angleRad = (diff * Math.PI) / 180;
+      const currentZ = Math.abs(activeCreatureMesh.position.z);
+      activeCreatureMesh.position.x = Math.sin(angleRad) * currentZ;
 
-      arWrapper.style.transform = `translate(calc(-50% + ${xMove}px), calc(-50% + ${yMove}px))`;
+      // Inclinación vertical (beta)
+      if (e.beta) {
+        const pitch = (e.beta - 70) * 0.05;
+        activeCreatureMesh.position.y = -pitch * (currentZ * 0.3);
+      }
     }
 
-    // ACCIÓN DE ATAQUE / DISPARO
+    // DISPARO / CAPTURA
     arView.addEventListener('pointerdown', (e) => {
       if (e.target.id === 'btn-exit-ar') return;
       if (!arActive) return;
@@ -468,13 +618,17 @@
       setTimeout(() => flash.style.display = 'none', 60);
 
       targetHP -= 34;
-      arTargetImg.style.filter = "brightness(2) drop-shadow(0 0 20px #ef4444)";
-      setTimeout(() => arTargetImg.style.filter = "drop-shadow(0 0 16px rgba(255,255,255,0.7))", 100);
+
+      // Animación de impacto en 3D (parpadeo de escala)
+      if (activeCreatureMesh) {
+        activeCreatureMesh.scale.set(1.35, 1.35, 1.35);
+        setTimeout(() => activeCreatureMesh.scale.set(1, 1, 1), 120);
+      }
 
       if (targetHP <= 0) {
         hpBar.style.width = '0%';
         playSound('capture');
-        setTimeout(captureDone, 200);
+        setTimeout(captureDone, 220);
       } else {
         hpBar.style.width = targetHP + '%';
         if (targetHP < 40) hpBar.style.background = '#ef4444';
@@ -484,7 +638,7 @@
     function captureDone() {
       totalScore += 100;
       document.getElementById('score-display').innerText = `Puntos: ${totalScore}`;
-      alert(`¡Criatura capturada en combate cuerpo a cuerpo!`);
+      alert(`¡Criatura 3D capturada con éxito!`);
       if (spawnedData[currentCreatureId]) {
         entitiesGroup.removeLayer(spawnedData[currentCreatureId].marker);
         delete spawnedData[currentCreatureId];
@@ -496,19 +650,27 @@
       arActive = false;
       if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
       window.removeEventListener('deviceorientation', handleOrientation);
+      if (activeCreatureMesh) {
+        threeScene.remove(activeCreatureMesh);
+        activeCreatureMesh = null;
+      }
       arView.style.display = 'none';
       updateMapCreaturesScale();
     }
 
     document.getElementById('btn-exit-ar').addEventListener('click', closeAR);
 
-    // 5. GPS TRACKING
+    /* =========================================================================
+       6. SEGUIMIENTO GPS
+       ========================================================================= */
+    initThreeAR();
+
     if ("geolocation" in navigator) {
       navigator.geolocation.watchPosition(
         (pos) => {
           playerLat = pos.coords.latitude;
           playerLng = pos.coords.longitude;
-          document.getElementById('status').innerText = "Radar GPS Activo";
+          document.getElementById('status').innerText = "Radar 3D Satélite Activo";
 
           if (!playerMarker) {
             map.setView([playerLat, playerLng], 18);
@@ -527,12 +689,12 @@
           } else {
             playerMarker.setLatLng([playerLat, playerLng]);
             if (rangeCircle) rangeCircle.setLatLng([playerLat, playerLng]);
-            updateMapCreaturesScale(); // Recalcular tamaño dinámico de cada criatura en el mapa
-            updateARDistance();       // Si estás dentro de AR, recalcula el tamaño del objetivo
+            updateMapCreaturesScale();
+            updateARDistance();
           }
         },
         (err) => console.warn(err),
-        { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
       );
     }
   </script>
