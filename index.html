@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Cazador de Criaturas 3D</title>
+  <title>Cazador 3D: Estilo Demogorgon & Moquete</title>
 
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-  <!-- Three.js (WebGL 3D nativo) -->
+  <!-- Three.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
   <style>
@@ -30,12 +30,11 @@
     }
 
     .hud-badge {
-      background: rgba(15, 23, 42, 0.9); color: #fff; padding: 8px 16px;
+      background: rgba(15, 23, 42, 0.92); color: #fff; padding: 8px 16px;
       border-radius: 20px; font-size: 13px; font-weight: 700;
-      border: 1px solid rgba(255, 255, 255, 0.25); box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      border: 1px solid rgba(255, 255, 255, 0.25); box-shadow: 0 4px 12px rgba(0,0,0,0.6);
     }
 
-    /* Marcador del mapa */
     .creature-icon-container {
       display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
       cursor: pointer;
@@ -74,10 +73,10 @@
       100% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0); }
     }
 
-    /* VISOR 3D / AR */
+    /* VISOR 3D AR */
     #ar-view {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      z-index: 2000; display: none; background: #0f172a; overflow: hidden;
+      z-index: 2000; display: none; background: #0b0f19; overflow: hidden;
     }
 
     #ar-video {
@@ -96,8 +95,8 @@
     }
 
     .ar-hud-top {
-      text-align: center; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-      pointer-events: auto; background: rgba(0,0,0,0.7); padding: 12px 24px;
+      text-align: center; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+      pointer-events: auto; background: rgba(0,0,0,0.75); padding: 12px 24px;
       border-radius: 18px; border: 1px solid rgba(255,255,255,0.25);
     }
 
@@ -136,7 +135,7 @@
     
     .ar-crosshair {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 50px; height: 50px; border: 2px dashed rgba(255,255,255,0.6);
+      width: 54px; height: 54px; border: 2px dashed rgba(255,255,255,0.7);
       border-radius: 50%; pointer-events: none; z-index: 6;
     }
   </style>
@@ -163,7 +162,7 @@
 
     <div class="ar-overlay">
       <div class="ar-hud-top">
-        <h2 id="target-title">CRIATURA 3D</h2>
+        <h2 id="target-title">CRIATURA</h2>
         <div id="hp-container"><div id="hp-bar"></div></div>
         <div id="distance-display">Distancia: -- m</div>
         <div id="range-badge" class="range-status range-locked">FUERA DE RANGO (> 5m)</div>
@@ -177,134 +176,202 @@
 
   <script>
     /* =========================================================================
-       1. GENERADOR PROCEDIMENTAL DE MODELOS 3D (THREE.JS)
+       1. GENERADOR 3D: ESTILO DEMOGORGON & MOQUETE (SLIMER)
        ========================================================================= */
     function createProceduralCreature3D(type, seed = Math.random()) {
-      const group = new THREE.Group();
-      const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+      const root = new THREE.Group();
+      root.userData = { type, animatedParts: [] };
 
       if (type === 'monster') {
-        // --- MONSTRUO 3D AMIGABLE (Formas orgánicas, cuernos, ojos brillantes) ---
-        const colors = [0xff4757, 0xffa502, 0x2ed573, 0x9b59b6, 0x1e90ff];
-        const primaryColor = colors[Math.floor(rand() * colors.length)];
-        const secondaryColor = 0xffffff;
-
-        // Cuerpo bulboso con relieve
-        const bodyGeo = new THREE.DodecahedronGeometry(1.2, 2);
-        const bodyMat = new THREE.MeshStandardMaterial({
-          color: primaryColor,
-          roughness: 0.4,
-          metalness: 0.1,
-          flatShading: true
+        // --- 1. MODELO ESTILO DEMOGORGON ---
+        const skinMat = new THREE.MeshStandardMaterial({
+          color: 0x4a3737, roughness: 0.65, metalness: 0.1, flatShading: true
         });
-        const body = new THREE.Mesh(bodyGeo, bodyMat);
-        group.add(body);
-
-        // Cuernos estilizados
-        const hornGeo = new THREE.ConeGeometry(0.25, 0.8, 6);
-        const hornMat = new THREE.MeshStandardMaterial({ color: 0xffd32a, roughness: 0.3 });
-        
-        const hornLeft = new THREE.Mesh(hornGeo, hornMat);
-        hornLeft.position.set(-0.7, 1.1, 0);
-        hornLeft.rotation.z = 0.4;
-        group.add(hornLeft);
-
-        const hornRight = new THREE.Mesh(hornGeo, hornMat);
-        hornRight.position.set(0.7, 1.1, 0);
-        hornRight.rotation.z = -0.4;
-        group.add(hornRight);
-
-        // Ojos 3D expresivos
-        const eyeCount = rand() > 0.5 ? 2 : 3;
-        const eyeXPositions = eyeCount === 2 ? [-0.4, 0.4] : [-0.55, 0, 0.55];
-
-        eyeXPositions.forEach(x => {
-          const eyeWhiteGeo = new THREE.SphereGeometry(0.3, 16, 16);
-          const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-          const eyeWhite = new THREE.Mesh(eyeWhiteGeo, eyeWhiteMat);
-          eyeWhite.position.set(x, 0.3, 0.95);
-          group.add(eyeWhite);
-
-          const pupilGeo = new THREE.SphereGeometry(0.14, 12, 12);
-          const pupilMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
-          const pupil = new THREE.Mesh(pupilGeo, pupilMat);
-          pupil.position.set(x, 0.3, 1.18);
-          group.add(pupil);
+        const mouthInsideMat = new THREE.MeshStandardMaterial({
+          color: 0x8b0000, roughness: 0.3, metalness: 0.2
+        });
+        const teethMat = new THREE.MeshStandardMaterial({
+          color: 0xfffff0, roughness: 0.2
         });
 
-        // Extremidades pequeñas
-        const armGeo = new THREE.SphereGeometry(0.35, 8, 8);
-        const armLeft = new THREE.Mesh(armGeo, bodyMat);
-        armLeft.position.set(-1.2, -0.2, 0.2);
-        group.add(armLeft);
+        // Torso delgado y fibroso
+        const torsoGeo = new THREE.CylinderGeometry(0.35, 0.22, 1.4, 8);
+        const torso = new THREE.Mesh(torsoGeo, skinMat);
+        torso.position.y = 0;
+        root.add(torso);
 
-        const armRight = new THREE.Mesh(armGeo, bodyMat);
-        armRight.position.set(1.2, -0.2, 0.2);
-        group.add(armRight);
+        // Cuello
+        const neckGeo = new THREE.CylinderGeometry(0.2, 0.28, 0.4, 6);
+        const neck = new THREE.Mesh(neckGeo, skinMat);
+        neck.position.y = 0.85;
+        root.add(neck);
+
+        // Centro bucal (agujero oscuro central)
+        const mouthCenterGeo = new THREE.SphereGeometry(0.38, 12, 12);
+        const mouthCenter = new THREE.Mesh(mouthCenterGeo, mouthInsideMat);
+        mouthCenter.position.set(0, 1.15, 0.1);
+        root.add(mouthCenter);
+
+        // 5 Pétalos / Mandíbulas en estrella que se abren hacia adelante
+        const petals = [];
+        const petalCount = 5;
+        for (let i = 0; i < petalCount; i++) {
+          const angle = (i / petalCount) * Math.PI * 2;
+          const petalPivot = new THREE.Group();
+          petalPivot.position.set(0, 1.15, 0.1);
+          petalPivot.rotation.z = angle;
+
+          // Forma cónica aplanada para cada mandíbula
+          const petalGeo = new THREE.ConeGeometry(0.26, 0.9, 4);
+          petalGeo.rotateX(Math.PI / 2);
+          const petalMesh = new THREE.Mesh(petalGeo, skinMat);
+          petalMesh.position.set(0, 0.45, 0.2);
+          petalMesh.scale.set(1.4, 0.3, 1);
+          petalPivot.add(petalMesh);
+
+          // Hileras de dientes cónicos dentro del pétalo
+          for (let t = -1; t <= 1; t += 2) {
+            const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.15, 4), teethMat);
+            tooth.rotation.x = -Math.PI / 2;
+            tooth.position.set(t * 0.1, 0.4, 0.3);
+            petalPivot.add(tooth);
+          }
+
+          root.add(petalPivot);
+          petals.push(petalPivot);
+        }
+        root.userData.petals = petals;
+
+        // Brazos largos y garras
+        [-1, 1].forEach(side => {
+          const armUpper = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.8, 6), skinMat);
+          armUpper.position.set(side * 0.55, 0.45, 0);
+          armUpper.rotation.z = -side * 0.4;
+          armUpper.rotation.x = 0.2;
+          root.add(armUpper);
+
+          const armFore = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.05, 0.9, 6), skinMat);
+          armFore.position.set(side * 0.85, -0.15, 0.25);
+          armFore.rotation.x = -0.5;
+          armFore.rotation.z = -side * 0.2;
+          root.add(armFore);
+
+          // Garras
+          for (let c = -1; c <= 1; c++) {
+            const claw = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.25, 4), teethMat);
+            claw.position.set(side * 0.85 + (c * 0.05), -0.6, 0.55);
+            claw.rotation.x = -Math.PI / 3;
+            root.add(claw);
+          }
+        });
 
       } else {
-        // --- FANTASMA 3D ESPECTRAL (Translúcido, etéreo, halo luminoso) ---
-        const ghostGeo = new THREE.CylinderGeometry(0.1, 1.1, 2.2, 16, 8, true);
-        const ghostMat = new THREE.MeshStandardMaterial({
-          color: 0x70a1ff,
-          emissive: 0x2ed573,
-          emissiveIntensity: 0.35,
+        // --- 2. MODELO ESTILO MOQUETE (SLIMER / CAZAFANTASMAS) ---
+        // Material ectoplasma verde translúcido y brillante
+        const slimerMat = new THREE.MeshStandardMaterial({
+          color: 0x39ff14,
+          emissive: 0x24a00e,
+          emissiveIntensity: 0.45,
+          roughness: 0.15,
+          metalness: 0.05,
           transparent: true,
-          opacity: 0.78,
-          roughness: 0.1,
-          side: THREE.DoubleSide
+          opacity: 0.88,
+          flatShading: false
         });
-        const body = new THREE.Mesh(ghostGeo, ghostMat);
-        body.position.y = -0.4;
-        group.add(body);
+        const pinkMouthMat = new THREE.MeshStandardMaterial({
+          color: 0x9b111e, roughness: 0.3, emissive: 0x300005
+        });
+        const yellowEyeMat = new THREE.MeshBasicMaterial({ color: 0xfff066 });
+        const blackPupilMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
+        const whiteToothMat = new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.1 });
 
-        // Cabeza redondeada
-        const headGeo = new THREE.SphereGeometry(0.9, 20, 20);
-        const head = new THREE.Mesh(headGeo, ghostMat);
-        head.position.y = 0.6;
-        group.add(head);
+        // Cuerpo bulboso y deforme (papada y vientre gelatinoso)
+        const bellyGeo = new THREE.SphereGeometry(0.85, 18, 18);
+        bellyGeo.scale(1.15, 1.35, 1.0);
+        const belly = new THREE.Mesh(bellyGeo, slimerMat);
+        belly.position.set(0, 0, 0);
+        root.add(belly);
 
-        // Ojos vacíos espectrales
-        const eyeGeo = new THREE.SphereGeometry(0.18, 12, 12);
-        const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0a192f });
+        // Cola ectoplásmica que se va estrechando hacia atrás
+        const tailGeo = new THREE.ConeGeometry(0.55, 1.2, 12);
+        const tail = new THREE.Mesh(tailGeo, slimerMat);
+        tail.position.set(0, -0.9, -0.3);
+        tail.rotation.x = 0.5;
+        root.add(tail);
 
-        const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
-        eyeL.position.set(-0.35, 0.7, 0.82);
-        group.add(eyeL);
+        // Enorme mandíbula inferior abierta de par en par
+        const jawGeo = new THREE.TorusGeometry(0.52, 0.18, 10, 16, Math.PI);
+        const jaw = new THREE.Mesh(jawGeo, slimerMat);
+        jaw.position.set(0, 0.05, 0.45);
+        jaw.rotation.x = Math.PI / 2.3;
+        root.add(jaw);
 
-        const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
-        eyeR.position.set(0.35, 0.7, 0.82);
-        group.add(eyeR);
+        // Fondo interior oscuro de la bocaza
+        const mouthCavity = new THREE.Mesh(new THREE.SphereGeometry(0.48, 12, 12), pinkMouthMat);
+        mouthCavity.position.set(0, 0.25, 0.3);
+        mouthCavity.scale.set(1, 0.7, 0.8);
+        root.add(mouthCavity);
 
-        // Halo ectoplásmico
-        const haloGeo = new THREE.TorusGeometry(1.2, 0.05, 8, 24);
-        const haloMat = new THREE.MeshBasicMaterial({ color: 0x7efff5, transparent: true, opacity: 0.4 });
-        const halo = new THREE.Mesh(haloGeo, haloMat);
-        halo.rotation.x = Math.PI / 2;
-        halo.position.y = -1.2;
-        group.add(halo);
+        // Lengua interior hinchada
+        const tongue = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshStandardMaterial({ color: 0xff3366 }));
+        tongue.position.set(0, 0.12, 0.45);
+        tongue.scale.set(1.2, 0.5, 1.4);
+        root.add(tongue);
+
+        // Dientes desparejados
+        [-0.25, -0.1, 0.1, 0.25].forEach(x => {
+          const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.12, 0.07), whiteToothMat);
+          tooth.position.set(x, 0.42, 0.65);
+          tooth.rotation.y = (Math.random() - 0.5) * 0.4;
+          root.add(tooth);
+        });
+
+        // Ojos saltones y estrábicos
+        [[-0.32, 0.65, 0.68], [0.32, 0.65, 0.68]].forEach((pos, idx) => {
+          const eye = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 12), yellowEyeMat);
+          eye.position.set(...pos);
+          root.add(eye);
+
+          const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 10), blackPupilMat);
+          pupil.position.set(pos[0] + (idx === 0 ? 0.02 : -0.04), pos[1] - 0.02, pos[2] + 0.13);
+          root.add(pupil);
+        });
+
+        // Brazos regordetes flotando
+        [-1, 1].forEach(side => {
+          const armGroup = new THREE.Group();
+          armGroup.position.set(side * 0.8, 0.2, 0.1);
+
+          const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.09, 0.65, 8), slimerMat);
+          arm.position.set(side * 0.25, 0, 0.2);
+          arm.rotation.z = -side * 0.8;
+          arm.rotation.x = 0.3;
+          armGroup.add(arm);
+
+          root.add(armGroup);
+          root.userData.animatedParts.push(armGroup);
+        });
       }
 
-      return group;
+      return root;
     }
 
-    // Renderiza una captura rápida del modelo 3D en un canvas pequeño para el mapa
+    // Miniatura para Leaflet
     function render3DToThumbnail(creatureGroup) {
       const thumbCanvas = document.createElement('canvas');
       thumbCanvas.width = 120;
       thumbCanvas.height = 120;
-
       const thumbRenderer = new THREE.WebGLRenderer({ canvas: thumbCanvas, alpha: true, antialias: true });
       thumbRenderer.setSize(120, 120);
 
       const thumbScene = new THREE.Scene();
       const thumbCam = new THREE.PerspectiveCamera(45, 1, 0.1, 50);
-      thumbCam.position.set(0, 0, 4);
+      thumbCam.position.set(0, 0.3, 3.8);
 
-      const light1 = new THREE.DirectionalLight(0xffffff, 1.2);
-      light1.position.set(2, 3, 4);
+      const light1 = new THREE.DirectionalLight(0xffffff, 1.4);
+      light1.position.set(2, 3, 3);
       thumbScene.add(light1);
-      thumbScene.add(new THREE.AmbientLight(0xffffff, 0.6));
+      thumbScene.add(new THREE.AmbientLight(0xffffff, 0.7));
 
       const clone = creatureGroup.clone();
       clone.position.set(0, 0, 0);
@@ -317,11 +384,11 @@
     }
 
     /* =========================================================================
-       2. ESCENA THREE.JS PARA REALIDAD AUMENTADA (CÁMARA + GIROSCOPIO + GPS)
+       2. ESCENA THREE.JS PARA AR
        ========================================================================= */
     let threeScene, threeCamera, threeRenderer;
     let activeCreatureMesh = null;
-    let activeLight = null;
+    let creaturePointLight = null;
 
     function initThreeAR() {
       const canvas = document.getElementById('three-canvas');
@@ -333,12 +400,15 @@
       threeCamera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
       threeCamera.position.set(0, 0, 0);
 
-      const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+      const ambient = new THREE.AmbientLight(0xffffff, 0.7);
       threeScene.add(ambient);
 
-      activeLight = new THREE.PointLight(0xffffff, 1.5, 50);
-      activeLight.position.set(2, 4, 2);
-      threeScene.add(activeLight);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight.position.set(3, 6, 2);
+      threeScene.add(dirLight);
+
+      creaturePointLight = new THREE.PointLight(0xffffff, 1.5, 30);
+      threeScene.add(creaturePointLight);
 
       window.addEventListener('resize', () => {
         threeCamera.aspect = window.innerWidth / window.innerHeight;
@@ -352,13 +422,32 @@
     let clock = new THREE.Clock();
     function animateThree() {
       requestAnimationFrame(animateThree);
-      const delta = clock.getDelta();
       const time = clock.getElapsedTime();
 
       if (activeCreatureMesh) {
-        // Animación suave continua de respiración/giro en 3D
-        activeCreatureMesh.rotation.y += 0.8 * delta;
-        activeCreatureMesh.position.y = Math.sin(time * 2) * 0.25; // Flotación
+        // Animación de respiración / flotación vertical
+        activeCreatureMesh.position.y = Math.sin(time * 2.5) * 0.22;
+
+        // Movimientos característicos según el tipo
+        if (activeCreatureMesh.userData.type === 'monster' && activeCreatureMesh.userData.petals) {
+          // Las fauces de Demogorgon se abren y contraen amenazantemente
+          const mouthOpenFactor = 0.55 + Math.sin(time * 3.5) * 0.25;
+          activeCreatureMesh.userData.petals.forEach((p, idx) => {
+            p.rotation.x = mouthOpenFactor;
+          });
+          activeCreatureMesh.rotation.y = Math.sin(time * 1.2) * 0.25;
+        } else if (activeCreatureMesh.userData.type === 'ghost') {
+          // El fantasma estilo Moquete tiene una deformación gelatinosa y aleteo de brazos
+          const squash = 1 + Math.sin(time * 4) * 0.08;
+          activeCreatureMesh.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
+          activeCreatureMesh.rotation.y += 0.015;
+          activeCreatureMesh.rotation.z = Math.sin(time * 2) * 0.08;
+        }
+
+        if (creaturePointLight) {
+          creaturePointLight.position.copy(activeCreatureMesh.position);
+          creaturePointLight.position.y += 1;
+        }
       }
 
       threeRenderer.render(threeScene, threeCamera);
@@ -398,7 +487,7 @@
     }
 
     /* =========================================================================
-       4. MAPA Y GEOLOCALIZACIÓN
+       4. RADAR SATÉLITE & MAPA
        ========================================================================= */
     let totalScore = 0;
     let targetHP = 100;
@@ -415,10 +504,10 @@
 
     function getDistance(lat1, lon1, lat2, lon2) {
       const R = 6371e3;
-      const rad = Math.PI/180;
-      const dLat = (lat2-lat1)*rad, dLon = (lon2-lon1)*rad;
-      const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLon/2)*Math.sin(dLon/2);
-      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+      const rad = Math.PI / 180;
+      const dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
     }
 
     function getRandomCoord(lat, lng, radiusMeters = 60) {
@@ -458,20 +547,23 @@
     function spawnCreatures(lat, lng) {
       entitiesGroup.clearLayers();
       spawnedData = {};
-      const archetypes = [{ type: 'monster', count: 3, glow: '#ff4757' }, { type: 'ghost', count: 3, glow: '#70a1ff' }];
+      const archetypes = [
+        { type: 'monster', name: 'Demogorgon', count: 3, glow: '#ff2a2a' },
+        { type: 'ghost', name: 'Espectro Moquete', count: 3, glow: '#39ff14' }
+      ];
 
       archetypes.forEach(group => {
         for (let i = 0; i < group.count; i++) {
           const id = `${group.type}_${i}`;
           const [cLat, cLng] = getRandomCoord(lat, lng, 60);
 
-          // Generar malla 3D procedural
           const creature3D = createProceduralCreature3D(group.type);
           const thumbUrl = render3DToThumbnail(creature3D);
 
           spawnedData[id] = {
             id,
             type: group.type,
+            name: `${group.name} #${Math.floor(10 + Math.random() * 89)}`,
             lat: cLat,
             lng: cLng,
             mesh: creature3D,
@@ -498,7 +590,7 @@
     }
 
     /* =========================================================================
-       5. COMBATE Y REALIDAD AUMENTADA CON THREE.JS
+       5. COMBATE AR 3D CON PERSPECTIVA REAL
        ========================================================================= */
     const arView = document.getElementById('ar-view');
     const arVideo = document.getElementById('ar-video');
@@ -507,6 +599,7 @@
     const hpBar = document.getElementById('hp-bar');
     const warningFlash = document.getElementById('warning-flash');
     const flash = document.getElementById('flash');
+    const targetTitle = document.getElementById('target-title');
 
     let videoStream = null;
     let arActive = false;
@@ -521,19 +614,24 @@
       hpBar.style.width = '100%';
       hpBar.style.background = '#22c55e';
 
-      // Montar la criatura 3D en la escena
+      const creature = spawnedData[id];
+      targetTitle.innerText = creature.name.toUpperCase();
+
+      // Ajustar la luz según el tipo de criatura
+      if (creaturePointLight) {
+        creaturePointLight.color.setHex(creature.type === 'monster' ? 0xff3333 : 0x39ff14);
+      }
+
       if (activeCreatureMesh) threeScene.remove(activeCreatureMesh);
-      activeCreatureMesh = spawnedData[id].mesh;
+      activeCreatureMesh = creature.mesh;
       threeScene.add(activeCreatureMesh);
 
-      // Desfase horizontal inicial aleatorio para obligar a buscarla
       baseAlpha = null;
-      targetAzimuth = (Math.random() * 60) - 30; // Entre -30 y +30 grados respecto a tu frente
+      targetAzimuth = (Math.random() * 60) - 30;
 
       arView.style.display = 'block';
       updateARDistance();
 
-      // Giroscopio (iOS/Android)
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
           const perm = await DeviceOrientationEvent.requestPermission();
@@ -543,7 +641,6 @@
         window.addEventListener('deviceorientation', handleOrientation);
       }
 
-      // Cámara
       try {
         if (navigator.mediaDevices) {
           videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -552,14 +649,13 @@
       } catch (err) { console.warn("Sin cámara:", err); }
     };
 
-    // Actualiza la posición 3D real de la criatura conforme caminamos con el GPS
+    // Actualiza la distancia Z física en el espacio 3D
     function updateARDistance() {
       if (!arActive || !currentCreatureId || !activeCreatureMesh) return;
       const c = spawnedData[currentCreatureId];
       currentDistance = Math.round(getDistance(playerLat, playerLng, c.lat, c.lng));
       distanceDisplay.innerText = `Distancia: ${currentDistance} metros`;
 
-      // Regla de los 5 metros
       if (currentDistance <= 5) {
         rangeBadge.className = "range-status range-ready";
         rangeBadge.innerText = "¡EN RANGO DE ATAQUE! (< 5m)";
@@ -570,14 +666,13 @@
         distanceDisplay.style.color = "#ef4444";
       }
 
-      // Posicionamiento en Z 3D:
-      // Mapeamos los metros GPS a unidades Three.js (entre -3.5 y -20)
-      // A 2 metros está a Z=-3.5 (enorme y encima de ti); a 40 metros está a Z=-20 (pequeño y en el horizonte).
-      let zDist = - (Math.max(2, Math.min(currentDistance, 45)) * 0.6 + 2.5);
+      // Profundidad espacial 3D:
+      // A 2m está a Z = -3.2 (gigante, en tus narices). A 30m está a Z = -18 (pequeño y distante).
+      let zDist = - (Math.max(2, Math.min(currentDistance, 45)) * 0.55 + 2.2);
       activeCreatureMesh.position.z = zDist;
     }
 
-    // Orientación por giroscopio (mueve la cámara Three.js alrededor de la criatura)
+    // Orientación por giroscopio
     function handleOrientation(e) {
       if (!arActive || !activeCreatureMesh) return;
       let alpha = e.webkitCompassHeading || e.alpha;
@@ -589,12 +684,10 @@
       if (diff > 180) diff -= 360;
       if (diff < -180) diff += 360;
 
-      // Desplazamiento lateral X en el mundo 3D según el ángulo
       const angleRad = (diff * Math.PI) / 180;
       const currentZ = Math.abs(activeCreatureMesh.position.z);
       activeCreatureMesh.position.x = Math.sin(angleRad) * currentZ;
 
-      // Inclinación vertical (beta)
       if (e.beta) {
         const pitch = (e.beta - 70) * 0.05;
         activeCreatureMesh.position.y = -pitch * (currentZ * 0.3);
@@ -619,10 +712,9 @@
 
       targetHP -= 34;
 
-      // Animación de impacto en 3D (parpadeo de escala)
       if (activeCreatureMesh) {
-        activeCreatureMesh.scale.set(1.35, 1.35, 1.35);
-        setTimeout(() => activeCreatureMesh.scale.set(1, 1, 1), 120);
+        activeCreatureMesh.scale.multiplyScalar(1.25);
+        setTimeout(() => activeCreatureMesh.scale.set(1, 1, 1), 100);
       }
 
       if (targetHP <= 0) {
@@ -638,7 +730,7 @@
     function captureDone() {
       totalScore += 100;
       document.getElementById('score-display').innerText = `Puntos: ${totalScore}`;
-      alert(`¡Criatura 3D capturada con éxito!`);
+      alert(`¡${spawnedData[currentCreatureId]?.name} capturado con éxito!`);
       if (spawnedData[currentCreatureId]) {
         entitiesGroup.removeLayer(spawnedData[currentCreatureId].marker);
         delete spawnedData[currentCreatureId];
@@ -661,7 +753,7 @@
     document.getElementById('btn-exit-ar').addEventListener('click', closeAR);
 
     /* =========================================================================
-       6. SEGUIMIENTO GPS
+       6. GEOLOCALIZACIÓN GPS
        ========================================================================= */
     initThreeAR();
 
