@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Cazador: Rango 5 Metros & AR</title>
+  <title>Cazador: Radar Satélite Dinámico & AR</title>
 
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -32,22 +32,30 @@
       border: 1px solid rgba(255, 255, 255, 0.25); box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     }
 
+    /* Contenedor del marcador dinámico */
     .creature-icon-container {
       display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
       cursor: pointer;
+      transition: transform 0.2s ease-out;
     }
 
     .creature-label {
-      background: #e11d48; color: #fff; font-size: 10px; font-weight: bold;
+      background: #e11d48; color: #fff; font-size: 10px; font-weight: 800;
       padding: 3px 8px; border-radius: 10px; margin-bottom: 2px;
-      white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-      animation: bounceLabel 1.5s infinite; border: 1px solid #fff;
+      white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      border: 1px solid #fff; transition: all 0.2s ease;
+    }
+
+    .creature-label.ready {
+      background: #16a34a !important;
+      border-color: #86efac;
+      animation: pulseGreen 1s infinite alternate;
     }
 
     .creature-icon-container img {
-      width: 60px; height: 60px;
       filter: drop-shadow(0 0 8px rgba(0,0,0,0.9)) drop-shadow(0 0 10px var(--glow, #ff0055));
       animation: floatMotion 2s ease-in-out infinite alternate;
+      transition: width 0.3s ease, height 0.3s ease;
     }
 
     .player-pin {
@@ -56,13 +64,13 @@
       animation: pulsePlayer 1.8s infinite;
     }
 
-    @keyframes bounceLabel {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-4px); }
+    @keyframes pulseGreen {
+      from { transform: scale(1); }
+      to { transform: scale(1.08); }
     }
     @keyframes floatMotion {
-      0% { transform: translateY(0px) scale(1); }
-      100% { transform: translateY(-6px) scale(1.05); }
+      0% { transform: translateY(0px); }
+      100% { transform: translateY(-6px); }
     }
     @keyframes pulsePlayer {
       0% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0.7); }
@@ -88,8 +96,8 @@
 
     .ar-hud-top {
       text-align: center; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-      pointer-events: auto; background: rgba(0,0,0,0.65); padding: 12px 20px;
-      border-radius: 16px; border: 1px solid rgba(255,255,255,0.2);
+      pointer-events: auto; background: rgba(0,0,0,0.7); padding: 12px 22px;
+      border-radius: 16px; border: 1px solid rgba(255,255,255,0.25);
     }
 
     .ar-hud-top h2 { margin: 0; font-size: 18px; letter-spacing: 1px; }
@@ -100,35 +108,14 @@
     }
 
     #hp-bar { width: 100%; height: 100%; background: #22c55e; transition: width 0.15s ease; }
-    
     #distance-display { font-weight: bold; font-size: 15px; margin-top: 6px; }
 
-    /* Indicador de estado de alcance */
     .range-status {
-      display: inline-block;
-      margin-top: 6px;
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
+      display: inline-block; margin-top: 6px; padding: 4px 14px;
+      border-radius: 12px; font-size: 12px; font-weight: 800;
     }
-    .range-locked {
-      background: rgba(239, 68, 68, 0.85);
-      color: #fff;
-      border: 1px solid #ff7b7b;
-    }
-    .range-ready {
-      background: rgba(34, 197, 94, 0.85);
-      color: #fff;
-      border: 1px solid #86efac;
-      animation: pulseGreen 1s infinite alternate;
-    }
-
-    @keyframes pulseGreen {
-      from { transform: scale(1); }
-      to { transform: scale(1.05); }
-    }
+    .range-locked { background: rgba(239, 68, 68, 0.85); color: #fff; border: 1px solid #ff7b7b; }
+    .range-ready { background: rgba(34, 197, 94, 0.85); color: #fff; border: 1px solid #86efac; animation: pulseGreen 1s infinite alternate; }
 
     #ar-target-wrapper {
       position: absolute; top: 50%; left: 50%;
@@ -139,7 +126,7 @@
 
     #ar-target-img {
       width: 200px; height: 200px;
-      filter: drop-shadow(0 0 16px rgba(255,255,255,0.7));
+      filter: drop-shadow(0 0 18px rgba(255,255,255,0.8));
       transition: transform 0.1s, width 0.3s, height 0.3s;
     }
 
@@ -203,7 +190,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    // 1. GENERADOR DE IMÁGENES PROCEDIMENTALES
+    // 1. GENERADOR PROCEDIMENTAL DE CRIATURAS
     function generateCreatureImage(type) {
       const canvas = document.createElement('canvas');
       canvas.width = 160; canvas.height = 160;
@@ -270,7 +257,6 @@
         gain.gain.setValueAtTime(0.35, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
         osc.connect(gain); gain.connect(audioCtx.destination); osc.start(now); osc.stop(now + 0.12);
       } else if (type === 'blocked') {
-        // Tono grave de advertencia / fuera de rango
         const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
         osc.type = 'sine'; osc.frequency.setValueAtTime(180, now); osc.frequency.setValueAtTime(140, now + 0.08);
         gain.gain.setValueAtTime(0.3, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.16);
@@ -293,7 +279,7 @@
     let spawnedData = {};
     let playerLat = 0, playerLng = 0;
     let playerMarker = null;
-    let rangeCircle = null; // Círculo visual de 5 metros
+    let rangeCircle = null;
 
     const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
     const map = L.map('map', { zoomControl: false, layers: [satLayer] }).setView([40.301, -3.535], 18);
@@ -313,6 +299,36 @@
       return [lat + w * Math.cos(t), lng + (w * Math.sin(t)) / Math.cos(lat * (Math.PI / 180))];
     }
 
+    // Actualiza el tamaño de cada criatura en el mapa según te mueves
+    function updateMapCreaturesScale() {
+      if (!playerLat || !playerLng) return;
+
+      Object.values(spawnedData).forEach(c => {
+        const dist = Math.round(getDistance(playerLat, playerLng, c.lat, c.lng));
+        const el = document.getElementById(`creature-${c.id}`);
+        if (!el) return;
+
+        const img = el.querySelector('img');
+        const label = el.querySelector('.creature-label');
+
+        // Escala dinámica del mapa: de 35px (lejos: >=60m) hasta 90px (a 5m o menos)
+        let mapSize = 95 - (dist * 0.9);
+        if (mapSize < 35) mapSize = 35;
+        if (mapSize > 90) mapSize = 90;
+
+        img.style.width = `${mapSize}px`;
+        img.style.height = `${mapSize}px`;
+
+        if (dist <= 5) {
+          label.className = "creature-label ready";
+          label.innerText = `¡A ${dist}m! ENTRA Y DISPARA`;
+        } else {
+          label.className = "creature-label";
+          label.innerText = `A ${dist}m (Acércate)`;
+        }
+      });
+    }
+
     function spawnCreatures(lat, lng) {
       entitiesGroup.clearLayers();
       spawnedData = {};
@@ -327,11 +343,13 @@
           spawnedData[id] = { id, type: group.type, lat: cLat, lng: cLng, img: imgUrl };
 
           const customIcon = L.divIcon({
-            className: 'creature-icon-container',
-            html: `<div class="creature-label">¡TOCA PARA CAZAR!</div>
-                   <img src="${imgUrl}" style="--glow: ${group.glow};" />`,
-            iconSize: [80, 90],
-            iconAnchor: [40, 80]
+            className: '',
+            html: `<div class="creature-icon-container" id="creature-${id}">
+                     <div class="creature-label">Calculando...</div>
+                     <img src="${imgUrl}" style="--glow: ${group.glow}; width: 55px; height: 55px;" />
+                   </div>`,
+            iconSize: [120, 110],
+            iconAnchor: [60, 95]
           });
 
           const marker = L.marker([cLat, cLng], { icon: customIcon }).addTo(entitiesGroup);
@@ -339,6 +357,8 @@
           spawnedData[id].marker = marker;
         }
       });
+
+      updateMapCreaturesScale();
     }
 
     // 4. MODO AR Y CONDICIÓN DE ATAQUE A < 5 METROS
@@ -396,7 +416,6 @@
       currentDistance = Math.round(getDistance(playerLat, playerLng, c.lat, c.lng));
       distanceDisplay.innerText = `Distancia: ${currentDistance} metros`;
 
-      // Comprobar la regla de los 5 metros
       if (currentDistance <= 5) {
         rangeBadge.className = "range-status range-ready";
         rangeBadge.innerText = "¡EN RANGO DE ATAQUE! (< 5m)";
@@ -407,8 +426,8 @@
         distanceDisplay.style.color = "#ef4444";
       }
 
-      // Escala visual
-      let size = 360 - (currentDistance * 4.5);
+      // Escala visual en AR: desde 70px (lejos) hasta 360px (cuerpo a cuerpo a <=5m)
+      let size = 370 - (currentDistance * 4.5);
       if (size < 70) size = 70;
       if (size > 360) size = 360;
       arTargetImg.style.width = size + 'px';
@@ -437,15 +456,13 @@
       if (e.target.id === 'btn-exit-ar') return;
       if (!arActive) return;
 
-      // REGLA: Sólo atacas a 5 metros o menos
       if (currentDistance > 5) {
         playSound('blocked');
         warningFlash.style.display = 'block';
         setTimeout(() => warningFlash.style.display = 'none', 90);
-        return; // Detener ataque
+        return;
       }
 
-      // Ataque exitoso
       playSound('laser');
       flash.style.display = 'block';
       setTimeout(() => flash.style.display = 'none', 60);
@@ -480,6 +497,7 @@
       if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
       window.removeEventListener('deviceorientation', handleOrientation);
       arView.style.display = 'none';
+      updateMapCreaturesScale();
     }
 
     document.getElementById('btn-exit-ar').addEventListener('click', closeAR);
@@ -497,7 +515,6 @@
             const pIcon = L.divIcon({ html: '<div class="player-pin"></div>', iconSize: [20, 20], className: '' });
             playerMarker = L.marker([playerLat, playerLng], { icon: pIcon }).addTo(map);
 
-            // Círculo de rango de 5 metros alrededor del jugador
             rangeCircle = L.circle([playerLat, playerLng], {
               radius: 5,
               color: '#007aff',
@@ -510,7 +527,8 @@
           } else {
             playerMarker.setLatLng([playerLat, playerLng]);
             if (rangeCircle) rangeCircle.setLatLng([playerLat, playerLng]);
-            updateARDistance();
+            updateMapCreaturesScale(); // Recalcular tamaño dinámico de cada criatura en el mapa
+            updateARDistance();       // Si estás dentro de AR, recalcula el tamaño del objetivo
           }
         },
         (err) => console.warn(err),
